@@ -1,3 +1,4 @@
+from typing import Any
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
@@ -57,7 +58,7 @@ def generate_projected_coordinates(
 
 def generate_normalized_coordinates(
     min_x: float, min_y: float, scale: float, shift_x: int, shift_y: int
-) -> function:
+) -> Any:
     def generate(projected_coordinates):
         normalized_coordinates = (
             int(round((projected_coordinates[0] - min_x) * scale) + shift_x),
@@ -124,7 +125,8 @@ def show_animation(frames: list):
         ims.append([ax.imshow(img, animated=True)])
 
     ani = animation.ArtistAnimation(f, ims, 16, blit=True)
-    plt.show()
+    ani.save('res.mp4', fps=60)
+    # plt.show()
 
 
 if __name__ == "__main__":
