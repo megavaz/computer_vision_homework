@@ -1,11 +1,12 @@
-from typing import Union
 import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
 
 
 def generate_random_points(num_points: int) -> dict:
     rng = np.random.default_rng()
     heights = rng.uniform(0, 1, num_points)
-    phis = rng.uniform(0, np.pi, num_points)
+    phis = rng.uniform(0, 2 * np.pi, num_points)
     coordinates = {i: [h, p] for i, (h, p) in enumerate(zip(heights, phis))}
     return coordinates
 
@@ -54,19 +55,20 @@ def generate_projected_coordinates(
     return projected_coordinates
 
 
-def generate_normalized_coordinates(min_x, min_y, scale, shift_x, shift_y):
+def generate_normalized_coordinates(
+    min_x: float, min_y: float, scale: float, shift_x: int, shift_y: int
+) -> function:
     def generate(projected_coordinates):
         normalized_coordinates = (
             int(round((projected_coordinates[0] - min_x) * scale) + shift_x),
             int(round((projected_coordinates[1] - min_y) * scale) + shift_y),
         )
-
         return normalized_coordinates
 
     return generate
 
 
-def generate_arrays(projected_coordinates: dict, shape: tuple):
+def generate_arrays(projected_coordinates: dict, shape: tuple) -> list:
     max_x = 0
     min_x = 0
     max_y = 0.5
@@ -99,12 +101,48 @@ def generate_arrays(projected_coordinates: dict, shape: tuple):
                 point_coordinates,
             )
         )
-    print('l')
+
+    frames = [np.zeros(shape) for i in range(len(normalized_coordinates[0]))]
+    for point_number, point_coordinates in normalized_coordinates.items():
+        for i, coord in enumerate(point_coordinates):
+            frames[i][coord[1] : coord[1] + 5, coord[0] : coord[0] + 5] = 1
+
+    return frames
+
+
+def append_coordinates(c1: dict, c2: dict) -> dict:
+    shift = len(c1)
+    for im_num, img in c2.items():
+        c1[im_num + shift] = img
+    return c1
+
+
+def show_animation(frames: list):
+    f, ax = plt.subplots()
+    ims = []
+    for img in frames:
+        ims.append([ax.imshow(img, animated=True)])
+
+    ani = animation.ArtistAnimation(f, ims, 16, blit=True)
+    plt.show()
 
 
 if __name__ == "__main__":
-    coordinates = generate_random_points(10)
-    rotational_coordinates = generate_rotation(10, "clock", coordinates)
-    projected_coordinates = generate_projected_coordinates(1, 3, rotational_coordinates)
-    # print(projected_coordinates[0])
-    generate_arrays(projected_coordinates, (480, 640))
+    coordinates = generate_random_points(100)
+    rotational_coordinates = generate_rotation(120, "counter", coordinates)
+    projected_coordinates = generate_projected_coordinates(
+        0.3, 2, rotational_coordinates
+    )
+
+    coordinates = generate_random_points(150)
+    rotational_coordinates = generate_rotation(120, "clock", coordinates)
+    projected_coordinates_2 = generate_projected_coordinates(
+        0.6, 2, rotational_coordinates
+    )
+
+    projected_coordinates = append_coordinates(
+        projected_coordinates, projected_coordinates_2
+    )
+    frames = generate_arrays(projected_coordinates, (480, 640))
+
+    show_animation(frames)
