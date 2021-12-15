@@ -4,10 +4,12 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
 
+RNG = np.random.default_rng()
+
+
 def generate_random_points(num_points: int) -> dict:
-    rng = np.random.default_rng()
-    heights = rng.uniform(0, 1, num_points)
-    phis = rng.uniform(0, 2 * np.pi, num_points)
+    heights = RNG.uniform(0, 1, num_points)
+    phis = RNG.uniform(0, 2 * np.pi, num_points)
     coordinates = {i: [h, p] for i, (h, p) in enumerate(zip(heights, phis))}
     return coordinates
 
@@ -69,7 +71,9 @@ def generate_normalized_coordinates(
     return generate
 
 
-def generate_arrays(projected_coordinates: dict, shape: tuple) -> list:
+def generate_arrays(
+    projected_coordinates: dict, shape: tuple, volume: bool = False
+) -> list:
     max_x = 0
     min_x = 0
     max_y = 0.5
@@ -86,8 +90,8 @@ def generate_arrays(projected_coordinates: dict, shape: tuple) -> list:
             if item[1] > max_y:
                 max_y = item[1]
 
-    scale_x = (shape[1] - 10) / (max_x - min_x)
-    scale_y = (shape[0] - 10) / (max_y - min_y)
+    scale_x = (shape[1] - 30) / (max_x - min_x)
+    scale_y = (shape[0] - 30) / (max_y - min_y)
     scale = min(scale_x, scale_y)
 
     normalized_coordinates = {}
@@ -106,8 +110,9 @@ def generate_arrays(projected_coordinates: dict, shape: tuple) -> list:
     frames = [np.zeros(shape) for i in range(len(normalized_coordinates[0]))]
     for point_number, point_coordinates in normalized_coordinates.items():
         for i, coord in enumerate(point_coordinates):
-            frames[i][coord[1] : coord[1] + 5, coord[0] : coord[0] + 5] = 1
-
+            frames[i][coord[1] : coord[1] + 1, coord[0] : coord[0] + 1] = 1
+    if volume:
+        frames = list(map(lambda a: np.repeat(a[..., np.newaxis], 3, axis=-1), frames))
     return frames
 
 
@@ -125,26 +130,96 @@ def show_animation(frames: list):
         ims.append([ax.imshow(img, animated=True)])
 
     ani = animation.ArtistAnimation(f, ims, 16, blit=True)
-    ani.save('res.mp4', fps=60)
-    # plt.show()
+    # ani.save("res.gif", fps=30)
+    plt.show()
+
+
+def pick_random_point(frame):
+    y_s, x_s = np.where(frame == 1)
+    i = RNG.integers(0, len(y_s), endpoint=False)
+    return y_s[i], x_s[i]
+
+
+def find_closest(frame, y, x, shape=(20, 20), motion_vector=(0, 0)):
+    y += motion_vector[0]
+    x += motion_vector[1]
+    area = frame[
+        y - int(shape[0] // 2) : y + int(shape[0] // 2),
+        x - int(shape[1] // 2) : x + int(shape[1] // 2),
+    ]
+    y_s, x_s = np.where(area[..., 0] == 1)
+    min_distance = shape[0] ** 2 + shape[1] ** 2
+    for y_cand, x_cand in zip(y_s, x_s):
+        distance = (y_cand - int(shape[0] // 2)) ** 2 + (
+            x_cand - int(shape[1] // 2)
+        ) ** 2
+        if distance < min_distance:
+            closest_y, closest_x = y_cand, x_cand
+            min_distance = distance
+
+    try:
+        distance_vector = (
+            closest_y - int(shape[0] // 2),
+            closest_x - int(shape[1] // 2),
+        )
+    except UnboundLocalError:
+        return find_closest(
+            frame,
+            y - motion_vector[0],
+            x - motion_vector[1],
+            (shape[0] + 10, shape[1] + 10),
+            motion_vector,
+        )
+    motion_vector = (
+        motion_vector[0] + distance_vector[0],
+        motion_vector[1] + distance_vector[1],
+    )
+    return y + distance_vector[0], x + distance_vector[1], motion_vector
+
+
+def track_point(frames):
+    y_start, x_start = pick_random_point(frames[0][..., 0])
+    y_s, x_s = [y_start], [x_start]
+    last_y = y_start
+    last_x = x_start
+    motion_vector = (0, 0)
+    motion_vectors = [motion_vector]
+    for frame in frames[1:]:
+        if len(motion_vectors) > 3:
+            c = 0.3
+            motion_vector = (
+                motion_vector[0] + int(c * (motion_vector[0] - motion_vectors[-2][0])),
+                motion_vector[1] + int(c * (motion_vector[1] - motion_vectors[-2][1])),
+            )
+        last_y, last_x, motion_vector = find_closest(
+            frame, last_y, last_x, shape=(20, 20), motion_vector=motion_vector
+        )
+        y_s.append(last_y)
+        x_s.append(last_x)
+        motion_vectors.append(motion_vector)
+    for i, (y, x) in enumerate(zip(y_s, x_s)):
+        frames[i][y, x, 1:] = 0
+    return frames
 
 
 if __name__ == "__main__":
     coordinates = generate_random_points(100)
     rotational_coordinates = generate_rotation(120, "counter", coordinates)
     projected_coordinates = generate_projected_coordinates(
-        0.3, 2, rotational_coordinates
+        1.2, 3, rotational_coordinates
     )
 
-    coordinates = generate_random_points(150)
+    coordinates = generate_random_points(50)
     rotational_coordinates = generate_rotation(120, "clock", coordinates)
     projected_coordinates_2 = generate_projected_coordinates(
-        0.6, 2, rotational_coordinates
+        0.6, 3, rotational_coordinates
     )
 
     projected_coordinates = append_coordinates(
         projected_coordinates, projected_coordinates_2
     )
-    frames = generate_arrays(projected_coordinates, (480, 640))
+    frames_tracked = generate_arrays(projected_coordinates, (240, 360), volume=True)
+    for i in range(20):
+        frames_tracked = track_point(frames_tracked)
 
-    show_animation(frames)
+    show_animation(frames_tracked)
