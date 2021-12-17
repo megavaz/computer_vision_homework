@@ -199,18 +199,62 @@ def track_point(frames):
         motion_vectors.append(motion_vector)
     for i, (y, x) in enumerate(zip(y_s, x_s)):
         frames[i][y, x, 1:] = 0
-    return frames
+    return frames, motion_vectors, y_start / frames[0].shape[0] < 0.5
+
+
+def measure_angular_speed(motion_vectors):
+    horizontal_directions = []
+    for vector in motion_vectors:
+        if vector[1] != 0:
+            horizontal_directions.append(vector[1] / np.abs(vector[1]))
+        else:
+            horizontal_directions.append(0)
+    horizontal_directions = np.array(horizontal_directions)
+    total_frames_in_one_direction = np.maximum(np.count_nonzero(horizontal_directions == 1), np.count_nonzero(horizontal_directions == -1)) + (np.count_nonzero(horizontal_directions == 0) - 1) / 2
+    return np.pi / total_frames_in_one_direction, horizontal_directions
+
+
+def find_direction(motion_vectors, horizontal_directions, upper_half):
+    vertical_directions = []
+    for vector in motion_vectors:
+        if vector[0] != 0:
+            vertical_directions.append(vector[0] / np.abs(vector[0]))
+        else:
+            vertical_directions.append(0)
+    vertical_directions = np.array(vertical_directions)
+    reached_start_of_left_motion = False
+    for i in range(1, len(horizontal_directions)):
+        if reached_start_of_left_motion:
+            if vertical_directions[i] == 1:
+                if upper_half:
+                    print('Rotation is counter-clockwise!')
+                else:
+                    print('Rotation is clockwise!')
+                return
+            elif vertical_directions[i] == -1:
+                if upper_half:
+                    print('Rotation is clockwise!')
+                else:
+                    print('Rotation is counter-clockwise!')
+                return
+            else:
+                continue
+
+        else:
+            if horizontal_directions[i] == 0 and horizontal_directions[i+1] == -1 and horizontal_directions[i+2] == -1:
+                reached_start_of_left_motion = True
+
 
 
 if __name__ == "__main__":
-    coordinates = generate_random_points(100)
-    rotational_coordinates = generate_rotation(120, "counter", coordinates)
+    coordinates = generate_random_points(60)
+    rotational_coordinates = generate_rotation(120, "clock", coordinates)
     projected_coordinates = generate_projected_coordinates(
         1.2, 3, rotational_coordinates
     )
 
     coordinates = generate_random_points(50)
-    rotational_coordinates = generate_rotation(120, "clock", coordinates)
+    rotational_coordinates = generate_rotation(120, "counter", coordinates)
     projected_coordinates_2 = generate_projected_coordinates(
         0.6, 3, rotational_coordinates
     )
@@ -219,7 +263,11 @@ if __name__ == "__main__":
         projected_coordinates, projected_coordinates_2
     )
     frames_tracked = generate_arrays(projected_coordinates, (240, 360), volume=True)
-    for i in range(20):
-        frames_tracked = track_point(frames_tracked)
+    for i in range(1):
+        frames_tracked, motion_vectors, upper_half = track_point(frames_tracked)
+        
 
+    angular_speed, horizontal_directions = measure_angular_speed(motion_vectors)
+    print('angular speed is {} r/f or {} d/f'.format(angular_speed, angular_speed * 180 / np.pi))
+    find_direction(motion_vectors, horizontal_directions, upper_half)
     show_animation(frames_tracked)
