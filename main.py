@@ -245,6 +245,13 @@ def find_direction(motion_vectors, horizontal_directions, upper_half):
                 reached_start_of_left_motion = True
 
 
+def scale_dots(frames, scale_factor=4):
+    for i, f in enumerate(frames):
+        coordinates = np.where(f[..., 0] == 1)
+        for (y, x) in zip(coordinates[0], coordinates[1]):
+            frames[i][y: y + scale_factor, x: x + scale_factor] = f[y,x]
+    return frames
+
 
 if __name__ == "__main__":
     coordinates = generate_random_points(60)
@@ -270,4 +277,6 @@ if __name__ == "__main__":
     angular_speed, horizontal_directions = measure_angular_speed(motion_vectors)
     print('angular speed is {} r/f or {} d/f'.format(angular_speed, angular_speed * 180 / np.pi))
     find_direction(motion_vectors, horizontal_directions, upper_half)
+
+    frames_tracked = scale_dots(frames_tracked)
     show_animation(frames_tracked)
